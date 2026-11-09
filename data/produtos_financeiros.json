@@ -1,0 +1,98 @@
+{
+  "atualizado_em": "2026-10-30",
+  "produtos": [
+    {
+      "id": "PROD-001",
+      "nome": "Tesouro Selic 2029",
+      "categoria": "Renda Fixa Soberana",
+      "risco": "Baixo",
+      "rentabilidade_referencia": "100% da Taxa Selic + 0,04% a.a.",
+      "liquidez": "Diária (D+0)",
+      "investimento_minimo": 150.0,
+      "tributacao": "IR Regressivo (22,5% a 15%)",
+      "perfis_recomendados": [
+        "Conservador",
+        "Moderado",
+        "Arrojado"
+      ],
+      "indicacao": "Reserva de emergência e objetivos de curtíssimo prazo."
+    },
+    {
+      "id": "PROD-002",
+      "nome": "CDB Liquidez Diária Banco Sólido",
+      "categoria": "Renda Fixa Bancária",
+      "risco": "Baixo (Cobertura FGC até R$ 250 mil)",
+      "rentabilidade_referencia": "102% do CDI",
+      "liquidez": "Diária (D+0)",
+      "investimento_minimo": 100.0,
+      "tributacao": "IR Regressivo (22,5% a 15%)",
+      "perfis_recomendados": [
+        "Conservador",
+        "Moderado",
+        "Arrojado"
+      ],
+      "indicacao": "Caixa imediato e complemento da reserva de emergência."
+    },
+    {
+      "id": "PROD-003",
+      "nome": "LCI Tech Agro 12 Meses",
+      "categoria": "Renda Fixa Isenta",
+      "risco": "Baixo (Cobertura FGC até R$ 250 mil)",
+      "rentabilidade_referencia": "93% do CDI (Isento de IR para PF)",
+      "liquidez": "No vencimento (360 dias)",
+      "investimento_minimo": 1000.0,
+      "tributacao": "Isento de Imposto de Renda",
+      "perfis_recomendados": [
+        "Conservador",
+        "Moderado",
+        "Arrojado"
+      ],
+      "indicacao": "Metas de médio prazo (12 a 18 meses) como intercâmbio ou certificações."
+    },
+    {
+      "id": "PROD-004",
+      "nome": "Tesouro IPCA+ 2035",
+      "categoria": "Renda Fixa Inflação",
+      "risco": "Baixo a Médio (Marcação a mercado antes do vencimento)",
+      "rentabilidade_referencia": "IPCA + 6,25% a.a.",
+      "liquidez": "Diária (sujeito a oscilação de preço antes do vencimento)",
+      "investimento_minimo": 50.0,
+      "tributacao": "IR Regressivo (22,5% a 15%)",
+      "perfis_recomendados": [
+        "Moderado",
+        "Arrojado"
+      ],
+      "indicacao": "Proteção contra inflação e construção de patrimônio de longo prazo."
+    },
+    {
+      "id": "PROD-005",
+      "nome": "Carteira Recomendada FIIs Logística & Recebíveis",
+      "categoria": "Fundos Imobiliários (Renda Variável)",
+      "risco": "Médio",
+      "rentabilidade_referencia": "Dividend Yield estimado de 9,8% a.a. + variação da cota",
+      "liquidez": "D+2 em Bolsa (B3)",
+      "investimento_minimo": 110.0,
+      "tributacao": "Rendimentos isentos de IR para PF; 20% sobre ganho de capital na venda",
+      "perfis_recomendados": [
+        "Moderado",
+        "Arrojado"
+      ],
+      "indicacao": "Geração de renda passiva mensal no médio e longo prazo."
+    },
+    {
+      "id": "PROD-006",
+      "nome": "ETF HASH11 (Índice Nasdaq Crypto Index na B3)",
+      "categoria": "Criptoativos Regulados (Renda Variável)",
+      "risco": "Alto",
+      "rentabilidade_referencia": "Variação da cesta de criptoativos (Bitcoin, Ethereum e principais protocolos)",
+      "liquidez": "D+2 em Bolsa (B3)",
+      "investimento_minimo": 50.0,
+      "tributacao": "15% de IR sobre ganho de capital na venda",
+      "perfis_recomendados": [
+        "Moderado",
+        "Arrojado"
+      ],
+      "indicacao": "Diversificação tática limitada (recomendado até 5% do patrimônio para perfil Moderado)."
+    }
+  ]
+}

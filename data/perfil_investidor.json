@@ -1,0 +1,45 @@
+{
+  "cliente_id": "CLI-2026-089",
+  "nome": "Carlos Eduardo Mendes",
+  "idade": 34,
+  "profissao": "Especialista em Tecnologia e Dados",
+  "renda_mensal": 12500.0,
+  "perfil_risco": "Moderado",
+  "patrimonio_atual": {
+    "reserva_emergencia": 28500.0,
+    "renda_fixa_pos": 18000.0,
+    "renda_fixa_ipca": 9500.0,
+    "fundos_imobiliarios": 6000.0,
+    "criptoativos_etf": 2000.0,
+    "total": 64000.0
+  },
+  "metas_financeiras": [
+    {
+      "meta": "Completar Reserva de Emergência (6 meses de custo fixo)",
+      "valor_alvo": 36000.0,
+      "valor_atual": 28500.0,
+      "prazo_meses": 5,
+      "prioridade": "Alta"
+    },
+    {
+      "meta": "Certificação Internacional Cloud & AI e intercâmbio técnico",
+      "valor_alvo": 25000.0,
+      "valor_atual": 9500.0,
+      "prazo_meses": 14,
+      "prioridade": "Média"
+    },
+    {
+      "meta": "Construção de Renda Passiva de Longo Prazo",
+      "valor_alvo": 250000.0,
+      "valor_atual": 26000.0,
+      "prazo_meses": 60,
+      "prioridade": "Média"
+    }
+  ],
+  "preferencias": {
+    "liquidez_prioritaria": true,
+    "interesse_cripto_regulado": true,
+    "limite_exposicao_renda_variavel_pct": 25,
+    "alerta_categoria_alimentacao": 2000.0
+  }
+}

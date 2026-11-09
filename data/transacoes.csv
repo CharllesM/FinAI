@@ -1,0 +1,13 @@
+data,categoria,descricao,valor,tipo
+2026-10-01,Receita,Salário Mensal Tech Lead,12500.00,entrada
+2026-10-03,Moradia,Aluguel e Condomínio,3200.00,saida
+2026-10-05,Alimentação,Supermercado Mensal,1450.00,saida
+2026-10-07,Educação,Mensalidade Pós-Graduação IA,680.00,saida
+2026-10-10,Lazer,Assinaturas de Streaming e Música,149.90,saida
+2026-10-12,Alimentação,Delivery e Restaurantes,620.00,saida
+2026-10-15,Transporte,Combustível e Pedágio,480.00,saida
+2026-10-18,Compras,Equipamentos e Periféricos,890.00,saida
+2026-10-20,Investimento,Aporte Tesouro Selic Reserva,1500.00,saida
+2026-10-22,Saúde,Plano de Saúde e Farmácia,740.00,saida
+2026-10-25,Alimentação,Delivery Fim de Semana,390.00,saida
+2026-10-28,Serviços,Internet Fibra e Energia,330.00,saida
