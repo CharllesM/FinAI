@@ -33,24 +33,80 @@ with st.sidebar:
 
     provider = st.selectbox(
         "Motor de IA (LLM)",
-        options=["auto", "local", "gemini", "openai"],
+        options=["auto", "gemini", "lmstudio", "openai", "local"],
         format_func=lambda x: {
             "auto": "Automático (API ou Fallback Local)",
-            "local": "Motor Consultivo Local (Offline/Auditado)",
-            "gemini": "Google Gemini API (gemini-2.5-flash)",
-            "openai": "OpenAI API (gpt-4o-mini)",
+            "gemini": "Google Gemini API (REST Nativo)",
+            "lmstudio": "LM Studio (API OpenAI Local - Porta 1234)",
+            "openai": "OpenAI API (Cloud ou URL Customizada)",
+            "local": "Motor Consultivo Local (RAG Determinístico Offline)",
         }[x],
     )
 
-    if provider in ("gemini", "auto"):
-        gemini_key = st.text_input("GEMINI_API_KEY (opcional)", type="password")
-        if gemini_key:
-            os.environ["GEMINI_API_KEY"] = gemini_key
+    gemini_key_input = ""
+    openai_key_input = ""
+    openai_base_url_input = ""
+    model_name_input = ""
 
-    if provider in ("openai", "auto"):
-        openai_key = st.text_input("OPENAI_API_KEY (opcional)", type="password")
-        if openai_key:
-            os.environ["OPENAI_API_KEY"] = openai_key
+    if provider in ("gemini", "auto"):
+        gemini_key_input = st.text_input(
+            "GEMINI_API_KEY (Google AI Studio)",
+            value=os.getenv("GEMINI_API_KEY", ""),
+            type="password",
+            help="Cole sua chave do Google AI Studio (aistudio.google.com). Usa REST nativo e tenta automaticamente gemini-2.5-flash, gemini-2.0-flash e gemini-1.5-flash.",
+        )
+        if provider == "gemini":
+            model_name_input = st.text_input(
+                "Modelo Gemini (deixe em branco p/ auto)",
+                value=os.getenv("LLM_MODEL_NAME", ""),
+                placeholder="Ex: gemini-2.0-flash",
+            )
+
+    if provider == "lmstudio":
+        openai_base_url_input = st.text_input(
+            "URL do Servidor Local LM Studio",
+            value=os.getenv("OPENAI_BASE_URL", "http://localhost:1234/v1"),
+            help="No LM Studio, vá na aba 'Developer' (ou Local Server) e clique em 'Start Server' (porta padrão 1234).",
+        )
+        model_name_input = st.text_input(
+            "ID do Modelo no LM Studio (opcional)",
+            value=os.getenv("LLM_MODEL_NAME", ""),
+            placeholder="Auto-detectado via /v1/models se vazio",
+        )
+
+    if provider == "openai":
+        openai_base_url_input = st.text_input(
+            "OpenAI Base URL",
+            value=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+            help="Para OpenAI oficial use https://api.openai.com/v1. Para LM Studio use http://localhost:1234/v1.",
+        )
+        openai_key_input = st.text_input(
+            "OPENAI_API_KEY",
+            value=os.getenv("OPENAI_API_KEY", ""),
+            type="password",
+            help="Para servidores locais (LM Studio / Ollama), pode deixar em branco ou digitar 'lm-studio'.",
+        )
+        model_name_input = st.text_input(
+            "Modelo (opcional)",
+            value=os.getenv("LLM_MODEL_NAME", ""),
+            placeholder="Ex: gpt-4o-mini ou deixe vazio p/ auto",
+        )
+
+    if st.button("🔌 Testar Conexão do Motor", use_container_width=True):
+        test_agent = FinAIAgent(
+            kb=kb,
+            provider=provider,
+            gemini_api_key=gemini_key_input,
+            openai_api_key=openai_key_input,
+            openai_base_url=openai_base_url_input,
+            model_name=model_name_input,
+        )
+        test_res = test_agent.answer("Responda em uma frase curta: qual é o meu saldo livre em outubro de 2026?")
+        if test_res.get("error"):
+            st.error(f"Falha na conexão com a API:\n{test_res['error']}")
+            st.info(f"Fallback acionado com sucesso: {test_res['engine']}")
+        else:
+            st.success(f"Conectado com sucesso via: {test_res['engine']}")
 
     st.divider()
     st.subheader("👤 Perfil Carregado (`data/`)")
@@ -109,6 +165,8 @@ with tab_chat:
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
+            if msg.get("error"):
+                st.warning(f"⚠️ Diagnóstico da API (Fallback Local utilizado): {msg['error']}")
             if msg.get("engine"):
                 st.caption(f"⚙️ Processado por: {msg['engine']}")
 
@@ -120,11 +178,20 @@ with tab_chat:
         with st.chat_message("user"):
             st.markdown(prompt_to_run)
 
-        agent = FinAIAgent(kb=kb, provider=provider)
+        agent = FinAIAgent(
+            kb=kb,
+            provider=provider,
+            gemini_api_key=gemini_key_input,
+            openai_api_key=openai_key_input,
+            openai_base_url=openai_base_url_input,
+            model_name=model_name_input,
+        )
         result = agent.answer(prompt_to_run)
 
         with st.chat_message("assistant"):
             st.markdown(result["response"])
+            if result.get("error"):
+                st.warning(f"⚠️ Diagnóstico da API (Fallback Local utilizado): {result['error']}")
             st.caption(f"⚙️ Processado por: {result['engine']}")
 
         st.session_state.messages.append(
@@ -132,6 +199,7 @@ with tab_chat:
                 "role": "assistant",
                 "content": result["response"],
                 "engine": result["engine"],
+                "error": result.get("error", ""),
             }
         )
 

@@ -3,11 +3,13 @@
 """
 Módulo principal do Agente Financeiro Inteligente (FinAI).
 Responsável por:
-1. Carregar e validar a Base de Conhecimento (pasta data/);
-2. Calcular indicadores financeiros determinísticos (evitando erros matemáticos de LLMs);
-3. Construir o System Prompt e o contexto RAG local;
-4. Consultar o provedor LLM configurado (Google Gemini, OpenAI, Ollama) ou
-   executar o Motor Consultivo Local (Fallback determinístico para testes sem API Key).
+1. Carregar automaticamente variáveis de um arquivo .env (se existir);
+2. Carregar e validar a Base de Conhecimento (pasta data/);
+3. Calcular indicadores financeiros determinísticos (evitando erros matemáticos de LLMs);
+4. Construir o System Prompt e o contexto RAG local;
+5. Conectar via HTTP nativo (sem conflito de SDK) ao Google Gemini API,
+   LM Studio (OpenAI Local em http://localhost:1234/v1) ou OpenAI Cloud,
+   com diagnóstico transparente de erros e Fallback Determinístico Local.
 """
 
 from __future__ import annotations
@@ -15,8 +17,32 @@ from __future__ import annotations
 import csv
 import json
 import os
+import urllib.error
+import urllib.request
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
+
+def load_dotenv_file() -> None:
+    """Carrega variáveis do arquivo .env (se existir na raiz do projeto) sem depender de pacotes externos."""
+    env_candidates = [
+        Path(__file__).resolve().parent.parent / ".env",
+        Path.cwd() / ".env",
+    ]
+    for env_path in env_candidates:
+        if env_path.is_file():
+            for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                key = key.strip()
+                val = val.strip().strip('"').strip("'")
+                if key and key not in os.environ and val and not val.startswith("sua_chave_"):
+                    os.environ[key] = val
+
+
+load_dotenv_file()
 
 
 class KnowledgeBase:
@@ -146,71 +172,248 @@ def format_brl(value: float) -> str:
 
 
 class FinAIAgent:
-    """Agente Virtual Consultivo com suporte a múltiplos provedores LLM e fallback determinístico."""
+    """
+    Agente Virtual Consultivo com suporte a:
+    - Google Gemini API via REST nativo (sem depender de versão de SDK);
+    - LM Studio / Servidor Local compatível com OpenAI (http://localhost:1234/v1);
+    - OpenAI API Cloud (https://api.openai.com/v1);
+    - Motor Consultivo Local (RAG Determinístico Offline).
+    """
 
-    def __init__(self, kb: Optional[KnowledgeBase] = None, provider: str = "auto") -> None:
+    def __init__(
+        self,
+        kb: Optional[KnowledgeBase] = None,
+        provider: str = "auto",
+        gemini_api_key: Optional[str] = None,
+        openai_api_key: Optional[str] = None,
+        openai_base_url: Optional[str] = None,
+        model_name: Optional[str] = None,
+    ) -> None:
         self.kb = kb or KnowledgeBase()
         self.provider = provider
+        self.gemini_api_key = (gemini_api_key or os.getenv("GEMINI_API_KEY", "")).strip()
+        self.openai_api_key = (openai_api_key or os.getenv("OPENAI_API_KEY", "")).strip()
+        self.openai_base_url = (
+            openai_base_url
+            or os.getenv("OPENAI_BASE_URL", "")
+            or ("http://localhost:1234/v1" if provider == "lmstudio" else "https://api.openai.com/v1")
+        ).strip().rstrip("/")
+        self.model_name = (model_name or os.getenv("LLM_MODEL_NAME", "")).strip()
 
     def get_system_prompt(self) -> str:
         return (
             "Você é o FinAI, um Assistente Virtual Consultivo de Finanças Pessoais, Investimentos e Criptoativos Regulados.\n"
+            "Responda sempre em português do Brasil, de forma clara, acolhedora e bem formatada em Markdown.\n"
             "REGRAS OBRIGATÓRIAS (ANTI-ALUCINAÇÃO):\n"
             "1. Responda EXCLUSIVAMENTE com base nos dados do bloco abaixo.\n"
             "2. Nunca invente produtos financeiros, taxas ou dados de outros períodos não presentes na base.\n"
             "3. Respeite o perfil Moderado do cliente (limite de 25% em renda variável e até 5% em criptoativos via ETF HASH11).\n"
             "4. Se não houver informação suficiente na base, declare isso com transparência.\n"
-            "5. Sempre finalize sugerindo um próximo passo prático para apoiar a decisão da pessoa usuária.\n\n"
+            "5. Sempre finalize sugerindo um '**Próximo passo sugerido:**' prático para apoiar a decisão da pessoa usuária.\n\n"
             + self.kb.build_context_summary()
         )
+
+    def _call_gemini_rest(self, user_query: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        """
+        Chama a API REST oficial do Google Gemini diretamente via urllib (sem depender de google-genai).
+        Testa em cascata os modelos disponíveis para garantir compatibilidade com qualquer chave do Google AI Studio.
+        Retorna: (texto_resposta, nome_motor, erro_se_houver)
+        """
+        if not self.gemini_api_key:
+            return None, None, "Chave GEMINI_API_KEY vazia."
+
+        candidate_models = (
+            [self.model_name]
+            if self.model_name
+            else ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+        )
+        last_err = None
+
+        for model in candidate_models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.gemini_api_key}"
+            payload = {
+                "systemInstruction": {
+                    "parts": [{"text": self.get_system_prompt()}]
+                },
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [{"text": user_query}],
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": 0.2,
+                },
+            }
+            data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
+                url,
+                data=data,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    body = json.loads(resp.read().decode("utf-8"))
+                    candidates = body.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        text = "".join(p.get("text", "") for p in parts).strip()
+                        if text:
+                            return text, f"Google Gemini API ({model})", None
+            except urllib.error.HTTPError as e:
+                err_body = e.read().decode("utf-8", errors="ignore")
+                try:
+                    err_json = json.loads(err_body)
+                    msg = err_json.get("error", {}).get("message", err_body)
+                except Exception:
+                    msg = err_body
+                last_err = f"HTTP {e.code} no modelo {model}: {msg}"
+                # Se a chave for inválida (400 API_KEY_INVALID ou 403), não adianta tentar outro modelo
+                if e.code in (401, 403) or "API_KEY_INVALID" in err_body:
+                    break
+            except Exception as e:
+                last_err = f"Falha de conexão com Google Gemini ({model}): {e}"
+
+        return None, None, last_err
+
+    def _detect_openai_local_model(self, base_url: str, api_key: str) -> str:
+        """Consulta GET /v1/models no LM Studio ou servidor compatível para descobrir o ID do modelo carregado."""
+        if self.model_name:
+            return self.model_name
+        url = f"{base_url}/models"
+        req = urllib.request.Request(
+            url,
+            headers={"Authorization": f"Bearer {api_key}"},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+                models = body.get("data", [])
+                # Filtra modelos de embedding caso o LM Studio tenha ambos carregados
+                chat_models = [
+                    m.get("id")
+                    for m in models
+                    if m.get("id") and "embed" not in m.get("id", "").lower()
+                ]
+                if chat_models:
+                    return chat_models[0]
+                if models and models[0].get("id"):
+                    return models[0]["id"]
+        except Exception:
+            pass
+        return "local-model" if ("localhost" in base_url or "127.0.0.1" in base_url) else "gpt-4o-mini"
+
+    def _call_openai_compatible_rest(
+        self, user_query: str, base_url: str, api_key: str, provider_label: str
+    ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        """
+        Chama qualquer servidor compatível com OpenAI (/v1/chat/completions),
+        incluindo LM Studio (http://localhost:1234/v1), Ollama (http://localhost:11434/v1) e OpenAI Cloud.
+        """
+        effective_key = api_key if api_key else "lm-studio"
+        model_id = self._detect_openai_local_model(base_url, effective_key)
+        url = f"{base_url}/chat/completions"
+
+        payload = {
+            "model": model_id,
+            "messages": [
+                {"role": "system", "content": self.get_system_prompt()},
+                {"role": "user", "content": user_query},
+            ],
+            "temperature": 0.2,
+        }
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {effective_key}",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+                choices = body.get("choices", [])
+                if choices:
+                    text = choices[0].get("message", {}).get("content", "").strip()
+                    if text:
+                        return text, f"{provider_label} ({model_id})", None
+                return None, None, f"Resposta vazia de {url}."
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="ignore")
+            return None, None, f"HTTP {e.code} em {url} (modelo '{model_id}'): {err_body}"
+        except Exception as e:
+            return (
+                None,
+                None,
+                f"Não foi possível conectar a {url} ({e}). Verifique se o servidor local do LM Studio está iniciado (Start Server na porta 1234) e com um modelo carregado.",
+            )
 
     def answer(self, user_query: str) -> Dict[str, str]:
         """
         Retorna um dicionário com:
           - 'response': texto da resposta ao usuário
-          - 'engine': identificador do motor utilizado (Gemini, OpenAI, Ollama ou Motor Consultivo Local)
+          - 'engine': identificador do motor utilizado
+          - 'error': mensagem de diagnóstico caso a API selecionada tenha falhado (opcional)
         """
-        # Se o usuário configurou chave de API e pediu provedor externo
-        gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
-        openai_key = os.getenv("OPENAI_API_KEY", "").strip()
+        diagnostics: List[str] = []
 
-        if self.provider in ("gemini", "auto") and gemini_key:
-            try:
-                from google import genai
+        # 1. Provedor Google Gemini explícito ou automático com chave presente
+        if self.provider == "gemini" or (self.provider == "auto" and self.gemini_api_key):
+            text, engine, err = self._call_gemini_rest(user_query)
+            if text and engine:
+                return {"response": text, "engine": engine, "error": ""}
+            if err:
+                diagnostics.append(f"[Google Gemini] {err}")
 
-                client = genai.Client(api_key=gemini_key)
-                resp = client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=f"{self.get_system_prompt()}\n\nPergunta do cliente: {user_query}",
+        # 2. Provedor LM Studio explícito (ou auto quando OPENAI_BASE_URL aponta para localhost)
+        if self.provider == "lmstudio" or (
+            self.provider == "auto"
+            and ("localhost" in self.openai_base_url or "127.0.0.1" in self.openai_base_url)
+            and os.getenv("OPENAI_BASE_URL")
+        ):
+            lm_url = (
+                self.openai_base_url
+                if ("localhost" in self.openai_base_url or "127.0.0.1" in self.openai_base_url or self.provider == "lmstudio")
+                else "http://localhost:1234/v1"
+            )
+            text, engine, err = self._call_openai_compatible_rest(
+                user_query=user_query,
+                base_url=lm_url,
+                api_key=self.openai_api_key or "lm-studio",
+                provider_label="LM Studio Local API",
+            )
+            if text and engine:
+                return {"response": text, "engine": engine, "error": ""}
+            if err:
+                diagnostics.append(f"[LM Studio] {err}")
+
+        # 3. Provedor OpenAI Cloud (ou endpoint OpenAI customizado)
+        if self.provider == "openai" or (self.provider == "auto" and self.openai_api_key):
+            if not self.openai_api_key and "api.openai.com" in self.openai_base_url:
+                diagnostics.append("[OpenAI] Chave OPENAI_API_KEY não informada para api.openai.com.")
+            else:
+                text, engine, err = self._call_openai_compatible_rest(
+                    user_query=user_query,
+                    base_url=self.openai_base_url,
+                    api_key=self.openai_api_key,
+                    provider_label="OpenAI Compatible API",
                 )
-                if resp and resp.text:
-                    return {"response": resp.text, "engine": "Google Gemini API (gemini-2.5-flash)"}
-            except Exception:
-                pass
+                if text and engine:
+                    return {"response": text, "engine": engine, "error": ""}
+                if err:
+                    diagnostics.append(f"[OpenAI] {err}")
 
-        if self.provider in ("openai", "auto") and openai_key:
-            try:
-                from openai import OpenAI
-
-                client = OpenAI(api_key=openai_key)
-                completion = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": self.get_system_prompt()},
-                        {"role": "user", "content": user_query},
-                    ],
-                    temperature=0.2,
-                )
-                text = completion.choices[0].message.content
-                if text:
-                    return {"response": text, "engine": "OpenAI API (gpt-4o-mini)"}
-            except Exception:
-                pass
-
-        # Fallback: Motor Consultivo Determinístico Local (100% fundamentado na pasta data/)
+        # 4. Fallback: Motor Consultivo Determinístico Local (100% fundamentado na pasta data/)
+        error_msg = " | ".join(diagnostics) if diagnostics else ""
         return {
             "response": self._local_consultative_engine(user_query),
             "engine": "Motor Consultivo Local (RAG Determinístico Offline)",
+            "error": error_msg,
         }
 
     def _local_consultative_engine(self, query: str) -> str:
