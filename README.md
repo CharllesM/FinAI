@@ -53,8 +53,8 @@ assistente-virtual-ia/
 
 ### 1. Clonar o repositório e instalar dependências
 ```bash
-git clone https://github.com/CharllesM/assistente-virtual-ia.git
-cd assistente-virtual-ia
+git clone https://github.com/CharllesM/FinAI
+cd FinAI
 pip install -r requirements.txt
 ```
 
